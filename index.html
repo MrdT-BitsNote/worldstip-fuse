@@ -1,0 +1,2712 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拼豆工作台 · 图片转拼豆图纸与用量计算 | FUSE</title>
+<link rel="canonical" href="https://fuse.worldstip.com/">
+<meta name="description" content="把任意图片转成拼豆图纸：自动算豆数、板数、成品尺寸、每色颗数与备货量。支持 5mm 标准豆与 2.6mm 迷你豆，图片全程在你本机处理，不上传。">
+<meta property="og:site_name" content="FUSE 拼豆工作台">
+<meta property="og:url" content="https://fuse.worldstip.com/">
+<meta property="og:title" content="拼豆工作台 · 图片转拼豆图纸与用量计算">
+<meta property="og:description" content="拖一张图进来，自动出图纸和购物清单：多少颗、几块板、每种颜色买几袋。">
+<meta name="twitter:card" content="summary">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#FAF7F2">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke-width='2.6'%3E%3Ccircle cx='6.6' cy='6.6' r='3.9' stroke='%23FF7A1A'/%3E%3Ccircle cx='17.4' cy='6.6' r='3.9' stroke='%230071E3'/%3E%3Ccircle cx='6.6' cy='17.4' r='3.9' stroke='%234FB783'/%3E%3Ccircle cx='17.4' cy='17.4' r='3.9' stroke='%231D1D1F'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+/* ============================================================
+   令牌：暖白纸 + 暖近黑 + 单一强调橙（与自建站视觉同源）
+   ============================================================ */
+:root {
+  /* ---------- 苹果风（默认）---------- */
+  --paper: #F5F5F7;
+  --surface: #FFFFFF;
+  --surface-2: #EDEDF0;
+  --ink: #1D1D1F;
+  --ink-2: #6E6E73;
+  --ink-3: #8E8E93;
+  --line: rgba(0, 0, 0, 0.09);
+  --line-2: rgba(0, 0, 0, 0.16);
+
+  --accent: #0071E3;
+  --accent-d: #0058B0;
+  --sky: #0071E3;
+  --good: #248A3D;
+  --warn: #B45309;
+  --bad: #C0341D;
+
+  /* 圆角：苹果风偏大，复古风偏硬 */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  /* 阴影：苹果风用柔和扩散，复古风用硬投影 */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.08);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, 0.13);
+  --board-shadow: 0 4px 22px rgba(0, 0, 0, 0.09);
+
+  /* 画布内部配色（JS 绘制时会读取） */
+  --canvas-empty: #F7F7F9;
+  --canvas-grid: rgba(0, 0, 0, 0.10);
+  --ruler-bg: #ECECEF;
+  --ruler-ink: #8E8E93;
+  --board-line: #0071E3;
+  --checker: #EDEDF0;
+  --focus-bg: #EAF3FF;
+
+  /* 提示条 */
+  --note-bg: #EDF5EE;
+  --note-line: #C7DFCC;
+  --note-ink: #1F6B39;
+
+  /* 标识：四颗拼豆 */
+  --mark-1: #FF7A1A;
+  --mark-2: #0071E3;
+  --mark-3: #4FB783;
+  --mark-4: #1D1D1F;
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", "Consolas", "JetBrains Mono", ui-monospace, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+button, input, select { font-family: inherit; font-size: inherit; color: inherit; }
+
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+h1.sr-only { margin: 0; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ============================================================
+   顶栏
+   ============================================================ */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; font-size: 16px; font-weight: 600; }
+.brand small {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
+  color: var(--ink-3); text-transform: uppercase; font-weight: 400;
+}
+
+.spec-switch {
+  display: flex; gap: 0; padding: 3px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-md);
+}
+.spec-switch button {
+  min-height: 34px; padding: 0 14px;
+  background: transparent; border: 0; border-radius: 6px;
+  font-size: 13px; font-weight: 500; color: var(--ink-2); cursor: pointer;
+  transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+.spec-switch button[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; }
+.spec-switch button:not([aria-pressed="true"]):hover { color: var(--ink); background: var(--surface); }
+
+/* ============================================================
+   三栏布局
+   ============================================================ */
+.layout {
+  display: grid;
+  grid-template-columns: 272px minmax(320px, 1fr) 340px;
+  gap: 0;
+  /* stretch：左右工具栏拉到同一高度，视觉上才像一套工作台 */
+  align-items: stretch;
+  min-height: calc(100dvh - 63px);
+}
+
+.panel { padding: 18px; }
+.panel--left { border-right: 1px solid var(--line); }
+.panel--right { border-left: 1px solid var(--line); background: var(--surface); }
+
+.group { margin-bottom: 18px; }
+.group:last-child { margin-bottom: 0; }
+
+.group > label, .group-title {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--ink-2);
+  margin-bottom: 6px;
+}
+.group > label output, .group-title output {
+  font-family: var(--mono); font-size: 12px; color: var(--ink); font-weight: 600;
+}
+
+.hint { margin: 6px 0 0; font-size: 11px; color: var(--ink-3); line-height: 1.5; }
+
+/* 自动分析结果：让用户清楚"系统替我做了什么"，而不是背地里改参数 */
+.auto-note {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  background: #F1F7F3;
+  border: 1px solid #CFE3D6;
+  border-radius: var(--r-md);
+  font-size: 11px; line-height: 1.55; color: #26603F;
+}
+.auto-note[hidden] { display: none !important; }
+.auto-note b { font-weight: 600; }
+.auto-note.is-plain { background: #FFF8F1; border-color: #F3DDC6; color: #7A4A18; }
+
+/* 上传区 */
+.drop {
+  display: grid; place-items: center; gap: 8px;
+  padding: 20px 14px; margin-bottom: 18px;
+  background: var(--surface);
+  border: 1.5px dashed var(--line-2);
+  border-radius: var(--r-md);
+  text-align: center;
+  transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+.drop.is-over { border-color: var(--accent); background: #FFF8F1; }
+.drop p { margin: 0; font-size: 12px; color: var(--ink-2); }
+.drop b { font-size: 13px; font-weight: 600; }
+
+/* 滑块 */
+input[type="range"] {
+  width: 100%; height: 22px; margin: 0;
+  flex: 1 1 auto; min-width: 0;
+  -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: var(--line-2); border-radius: 2px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; margin-top: -6px;
+  background: var(--ink); border: 2px solid var(--surface); border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+input[type="range"]:hover::-webkit-slider-thumb { background: var(--accent); }
+input[type="range"]::-moz-range-track { height: 4px; background: var(--line-2); border-radius: 2px; }
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; background: var(--ink);
+  border: 2px solid var(--surface); border-radius: 50%;
+}
+
+/* 复选框 */
+.check {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 30px; font-size: 12px; color: var(--ink-2); cursor: pointer;
+}
+/* .group > label 是给滑块行（label + output 两端对齐）用的，
+   会连带命中复选框 label，这里必须压回来 */
+.group > label.check { justify-content: flex-start; }
+.check input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--ink); cursor: pointer; flex: none; }
+.check > span { flex: none; }
+
+/* 按钮 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 0 14px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, transform 120ms ease-out;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--ink-3); }
+.btn:active { transform: translateY(1px); }
+.btn--primary { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+.btn--primary:hover { background: var(--accent-d); border-color: var(--accent-d); }
+.btn--accent { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn--accent:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn[hidden] { display: none !important; }
+
+/* ============================================================
+   画布区
+   ============================================================ */
+.stage { min-width: 0; display: flex; flex-direction: column; }
+.stage > .canvas-wrap > canvas { min-width: 0; }
+
+.stage-toolbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.stage-toolbar .sep { width: 1px; height: 16px; background: var(--line); }
+.stage-toolbar .grow { flex: 1; }
+
+.canvas-wrap {
+  flex: 1;
+  display: flex;
+  padding: 20px;
+  overflow: auto;
+  min-width: 0;
+  background:
+    linear-gradient(45deg, #EFEAE2 25%, transparent 25%, transparent 75%, #EFEAE2 75%) 0 0 / 16px 16px,
+    linear-gradient(45deg, #EFEAE2 25%, transparent 25%, transparent 75%, #EFEAE2 75%) 8px 8px / 16px 16px,
+    var(--paper);
+}
+canvas#preview {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  box-shadow: 0 2px 16px rgba(27, 24, 21, 0.10);
+  cursor: zoom-in;
+}
+
+.empty-tip[hidden] { display: none !important; }
+
+.empty-tip {
+  display: grid; gap: 10px; place-items: center;
+  max-width: 380px; padding: 28px;
+  text-align: center; color: var(--ink-3); font-size: 13px;
+}
+.empty-tip strong { color: var(--ink); font-size: 15px; }
+
+/* ============================================================
+   右侧统计
+   ============================================================ */
+.kpis {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-bottom: 16px;
+}
+.kpi {
+  padding: 10px 12px;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.kpi dt { font-size: 11px; color: var(--ink-3); margin-bottom: 2px; }
+.kpi dd {
+  margin: 0; font-family: var(--mono); font-size: 17px; font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.kpi dd span { font-size: 11px; font-weight: 400; color: var(--ink-3); margin-left: 2px; }
+.kpi--wide { grid-column: span 2; }
+
+.table-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.table-head h2 { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.table-head span { font-size: 11px; color: var(--ink-3); }
+
+.table-wrap {
+  max-height: min(46vh, 420px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th {
+  position: sticky; top: 0; z-index: 1;
+  padding: 7px 8px; text-align: left;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px; font-weight: 600; color: var(--ink-2);
+  white-space: nowrap;
+}
+thead th.r, td.r { text-align: right; }
+tbody td { padding: 5px 8px; border-bottom: 1px solid #F1EBE2; vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: #FFFBF5; }
+.swatch {
+  display: inline-block; width: 16px; height: 16px; vertical-align: -3px;
+  border: 1px solid rgba(27, 24, 21, 0.22); border-radius: 2px;
+}
+.code { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+.bar {
+  position: relative; height: 4px; min-width: 34px;
+  background: var(--surface-2); border-radius: 2px; overflow: hidden;
+}
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink-3); border-radius: 2px; }
+
+.export { display: grid; gap: 8px; margin-top: 16px; }
+.export .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* 提示条 */
+.notice {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin-top: 14px; padding: 10px 12px;
+  background: #FFF8F1; border: 1px solid #F3DDC6; border-radius: var(--r-md);
+  font-size: 11px; line-height: 1.55; color: #7A4A18;
+}
+.notice strong { color: #5C340F; }
+
+/* 页脚 */
+.foot {
+  padding: 12px 20px; border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--ink-3);
+  display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between;
+}
+
+/* ============================================================
+   v2 视觉升级与图纸定位
+   覆盖上面的基础样式，放在响应式之前，确保窄屏规则仍然生效
+   ============================================================ */
+
+/* --- 顶栏：标识 + 双层标题 --- */
+.topbar {
+  padding: 11px 20px;
+  box-shadow: 0 1px 0 rgba(27, 24, 21, 0.05);
+}
+.brand { display: flex; align-items: center; gap: 11px; font-size: 15px; }
+/* 标识 = 四颗拼豆：中间留孔，透出底色，才是拼豆的样子 */
+.brand-mark {
+  display: inline-flex; flex: none;
+  width: 24px; height: 24px;
+}
+.brand-mark svg { display: block; overflow: visible; }
+.brand-mark circle { transition: stroke 0.3s ease; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-text small {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em;
+  color: var(--ink-3); font-weight: 400; margin-top: 2px;
+}
+
+/* --- 三栏：给面板一点呼吸 --- */
+.layout { grid-template-columns: 286px minmax(320px, 1fr) 356px; }
+.panel { padding: 16px; }
+.panel--right { padding-top: 18px; }
+
+/* 面板限高 + 内部滚动：等高之后内容可能超出，不能让它把整页顶长 */
+.panel--left, .panel--right {
+  max-height: calc(100dvh - 63px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.panel--left::-webkit-scrollbar,
+.panel--right::-webkit-scrollbar { width: 8px; }
+.panel--left::-webkit-scrollbar-thumb,
+.panel--right::-webkit-scrollbar-thumb {
+  background: var(--line-2); border-radius: 4px; border: 2px solid var(--surface);
+}
+.panel--left::-webkit-scrollbar-thumb:hover,
+.panel--right::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+.panel--left::-webkit-scrollbar-track,
+.panel--right::-webkit-scrollbar-track { background: transparent; }
+
+/* --- 参数分组做成卡片 --- */
+.group {
+  margin-bottom: 10px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.group:last-child { margin-bottom: 0; }
+.group > label, .group-title { margin-bottom: 8px; }
+.group-title {
+  padding-left: 9px;
+  border-left: 3px solid var(--accent);
+  border-radius: 1px;
+}
+
+/* --- 上传区更明确 --- */
+.drop {
+  padding: 22px 14px;
+  background: var(--surface);
+  border-width: 1.5px;
+  border-radius: var(--r-md);
+}
+.drop b { display: block; margin-bottom: 3px; }
+.drop .btn { margin-top: 4px; }
+
+/* --- KPI --- */
+.kpis { gap: 8px; margin-bottom: 16px; }
+.kpi {
+  padding: 9px 11px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.kpi dt { font-size: 10.5px; margin-bottom: 3px; }
+.kpi dd { font-size: 18px; }
+
+/* 右侧的单价卡片：面板底色同为 surface，加一点底色差才看得出来 */
+.price-card { background: var(--paper); margin-bottom: 14px; }
+
+/* --- 配色表：可点击定位 --- */
+.table-tip { margin: 0 0 8px; font-size: 11px; color: var(--ink-3); }
+tbody tr { cursor: pointer; transition: background-color 120ms ease-out; }
+tbody tr.is-focus { background: #FFF3E3; }
+tbody tr.is-focus td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+tbody tr.is-focus .code { color: var(--ink); font-weight: 600; }
+.swatch { width: 18px; height: 18px; vertical-align: -4px; border-radius: 3px; }
+tbody td { padding: 7px 8px; }
+
+/* --- 图纸舞台 --- */
+.stage-stack {
+  position: relative;
+  margin: auto;
+  flex: none;
+  line-height: 0;
+  background: #FFFFFF;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  box-shadow: 0 2px 18px rgba(27, 24, 21, 0.09);
+}
+.stage-stack[hidden] { display: none !important; }
+.stage-stack canvas { display: block; }
+#preview {
+  cursor: crosshair;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  max-width: 100%;
+  height: auto;
+}
+#overlay {
+  position: absolute; left: 0; top: 0;
+  pointer-events: none;
+  max-width: 100%;
+}
+
+/* 悬停坐标标签 */
+.cell-tip {
+  position: absolute; z-index: 6;
+  padding: 3px 8px;
+  background: rgba(27, 24, 21, 0.93);
+  color: #FFF6EC;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px; line-height: 1.45;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -135%);
+  box-shadow: 0 2px 8px rgba(27, 24, 21, 0.2);
+}
+.cell-tip[hidden] { display: none !important; }
+
+/* 画布区背景棋盘调淡，别抢图纸 */
+.canvas-wrap {
+  background:
+    linear-gradient(45deg, #F1ECE4 25%, transparent 25%, transparent 75%, #F1ECE4 75%) 0 0 / 18px 18px,
+    linear-gradient(45deg, #F1ECE4 25%, transparent 25%, transparent 75%, #F1ECE4 75%) 9px 9px / 18px 18px,
+    var(--paper);
+  padding: 22px;
+}
+
+/* 工具栏按钮轻量化 */
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+}
+.btn--ghost:hover { background: var(--surface-2); border-color: var(--line-2); color: var(--ink); }
+
+/* --- 缩放控件 --- */
+.zoom-ctl {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px; background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+}
+.zoom-ctl button {
+  width: 26px; height: 26px; min-height: 26px; padding: 0;
+  background: transparent; border: 0; border-radius: 5px;
+  font-size: 15px; line-height: 1; color: var(--ink-2); cursor: pointer;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.zoom-ctl button:hover { background: var(--surface-2); color: var(--ink); }
+.zoom-ctl output {
+  min-width: 44px; text-align: center;
+  font-family: var(--mono); font-size: 11px; color: var(--ink-2);
+}
+
+/* --- 拖拽平移 --- */
+.canvas-wrap.is-zoomable #preview { cursor: grab; }
+.canvas-wrap.is-dragging #preview { cursor: grabbing; }
+.canvas-wrap.is-dragging #overlay { opacity: 0.35; }
+
+/* --- 滚动条 --- */
+.table-wrap::-webkit-scrollbar,
+.canvas-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+.table-wrap::-webkit-scrollbar-thumb,
+.canvas-wrap::-webkit-scrollbar-thumb {
+  background: var(--line-2); border-radius: 5px;
+  border: 2px solid var(--surface);
+}
+.table-wrap::-webkit-scrollbar-thumb:hover,
+.canvas-wrap::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+.table-wrap::-webkit-scrollbar-track,
+.canvas-wrap::-webkit-scrollbar-track { background: transparent; }
+
+/* ============================================================
+   复古风主题：旧纸、砖红、硬投影、小圆角
+   与苹果风只换变量 + 少量装饰，结构不动
+   ============================================================ */
+[data-theme="retro"] {
+  --paper: #F0E6D2;
+  --surface: #FCF6EA;
+  --surface-2: #E7DABF;
+  --ink: #2B2118;
+  --ink-2: #6B5B4A;
+  --ink-3: #8C7B66;
+  --line: #DCCBAD;
+  --line-2: #BCA57E;
+
+  --accent: #C2410C;
+  --accent-d: #9A3412;
+  --sky: #1D6F8C;
+  --good: #3F6B33;
+  --warn: #A2550B;
+  --bad: #9A2B1C;
+
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+
+  --shadow-1: 2px 2px 0 rgba(43, 33, 24, 0.14);
+  --shadow-2: 3px 3px 0 rgba(43, 33, 24, 0.18);
+  --shadow-3: 5px 5px 0 rgba(43, 33, 24, 0.20);
+  --board-shadow: 4px 4px 0 rgba(43, 33, 24, 0.22);
+
+  --canvas-empty: #EFE6D4;
+  --canvas-grid: rgba(43, 33, 24, 0.16);
+  --ruler-bg: #E0D2B6;
+  --ruler-ink: #7A6A52;
+  --board-line: #C2410C;
+  --checker: #E7DBC3;
+  --focus-bg: #F6E3C8;
+
+  --note-bg: #F3EAD6;
+  --note-line: #D3BE97;
+  --note-ink: #6B5326;
+
+  --mark-1: #C2410C;
+  --mark-2: #1D6F8C;
+  --mark-3: #7A8B3A;
+  --mark-4: #2B2118;
+
+  --font: "PingFang SC", "Hiragino Sans GB", "Songti SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 复古风：边框加粗、圆角收紧，才有老印刷品的味道 */
+[data-theme="retro"] .group,
+[data-theme="retro"] .kpi,
+[data-theme="retro"] .drop,
+[data-theme="retro"] .table-wrap,
+[data-theme="retro"] .zoom-ctl,
+[data-theme="retro"] .spec-switch { border-width: 2px; }
+
+[data-theme="retro"] .stage-stack { border-width: 2px; border-radius: 2px; }
+[data-theme="retro"] .btn { border-width: 2px; }
+
+/* 复古风顶栏加一条深色压线 */
+[data-theme="retro"] .topbar {
+  border-bottom: 2px solid var(--line-2);
+  box-shadow: none;
+}
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.home-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 11px;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  font-size: 13px; color: var(--ink-2);
+  text-decoration: none; white-space: nowrap;
+  transition: background-color 0.16s ease, color 0.16s ease,
+              border-color 0.16s ease, transform 0.12s ease;
+}
+.home-link:hover { background: var(--surface-2); color: var(--ink); border-color: var(--ink-3); }
+.home-link:active { transform: scale(0.97); }
+.home-link svg { flex: none; opacity: 0.7; }
+
+.theme-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 34px; padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  font-size: 13px; color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
+}
+.theme-btn:hover { background: var(--surface-2); color: var(--ink); }
+.theme-btn:active { transform: scale(0.97); }
+.theme-swatch {
+  width: 14px; height: 14px; flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1px solid var(--line-2);
+  transition: background-color 0.3s ease;
+}
+[data-theme="retro"] .theme-swatch { border-radius: 0; }
+
+/* 图纸首次出现时淡入，别硬弹出来 */
+@keyframes board-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+.stage-stack.is-fresh { animation: board-in 0.34s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-stack.is-fresh { animation: none; }
+}
+
+/* ============================================================
+   把剩下的硬编码色换成变量，两套主题才真正生效
+   ============================================================ */
+.auto-note {
+  background: var(--note-bg);
+  border-color: var(--note-line);
+  color: var(--note-ink);
+}
+.auto-note.is-plain { background: var(--note-bg); border-color: var(--note-line); color: var(--note-ink); }
+
+.canvas-wrap {
+  background:
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%) 0 0 / 18px 18px,
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%) 9px 9px / 18px 18px,
+    var(--paper);
+}
+
+tbody tr.is-focus { background: var(--focus-bg); }
+
+.stage-stack {
+  border-color: var(--line-2);
+  box-shadow: var(--board-shadow);
+}
+
+.cell-tip {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: var(--shadow-2);
+}
+
+.topbar { box-shadow: var(--shadow-1); }
+
+/* 主题切换本身要有过渡，否则切起来很生硬 */
+body,
+.panel, .group, .kpi, .topbar, .drop, .btn,
+.stage-stack, .table-wrap, .zoom-ctl, .auto-note,
+.spec-switch, .foot {
+  transition: background-color 0.3s ease, border-color 0.3s ease,
+              color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 1180px) {
+  .layout { grid-template-columns: 250px 1fr; }
+  .panel--left, .panel--right { max-height: none; overflow: visible; }
+  .panel--right {
+    grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line);
+  }
+  .kpis { grid-template-columns: repeat(4, 1fr); }
+  .kpi--wide { grid-column: span 2; }
+}
+
+@media (max-width: 780px) {
+  .layout { grid-template-columns: 1fr; }
+  .panel--left, .panel--right { max-height: none; overflow: visible; }
+  .panel--left { border-right: 0; border-bottom: 1px solid var(--line); }
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .canvas-wrap { min-height: 320px; }
+  .topbar { padding: 12px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+}
+</style>
+</head>
+<body>
+
+<h1 class="sr-only">拼豆工作台：把图片转换成拼豆图纸，并计算豆数、板数、每色用量与备货量</h1>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="24" height="24" focusable="false">
+        <circle cx="6.6" cy="6.6" r="3.9" fill="none" stroke-width="2.6" style="stroke:var(--mark-1)"/>
+        <circle cx="17.4" cy="6.6" r="3.9" fill="none" stroke-width="2.6" style="stroke:var(--mark-2)"/>
+        <circle cx="6.6" cy="17.4" r="3.9" fill="none" stroke-width="2.6" style="stroke:var(--mark-3)"/>
+        <circle cx="17.4" cy="17.4" r="3.9" fill="none" stroke-width="2.6" style="stroke:var(--mark-4)"/>
+      </svg>
+    </span>
+    <span class="brand-text">拼豆工作台<small>BEAD WORKBENCH</small></span>
+  </div>
+  <div class="topbar-right">
+    <a class="home-link" href="https://worldstip.com/" target="_blank" rel="noopener noreferrer"
+       title="打开 WorldsTip 主站（新窗口）">
+      <span>WorldsTip 主站</span>
+      <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" focusable="false">
+        <path d="M3.6 8.4 8.4 3.6M4.9 3.6h3.5v3.5" fill="none" stroke="currentColor"
+              stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+    <button type="button" id="themeBtn" class="theme-btn" title="切换界面主题">
+      <span class="theme-swatch" aria-hidden="true"></span>
+      <span id="themeName">苹果风</span>
+    </button>
+    <div class="spec-switch" role="group" aria-label="选择豆子规格">
+      <button type="button" data-spec="midi" aria-pressed="true">5mm 标准豆</button>
+      <button type="button" data-spec="mini" aria-pressed="false">2.6mm 迷你豆</button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ========== 左：输入与参数 ========== -->
+  <section class="panel panel--left" aria-label="图片与参数">
+    <div class="drop" id="drop">
+      <b>拖入图片，或 Ctrl+V 粘贴</b>
+      <p>图片只在你本机处理，不会上传</p>
+      <button class="btn" type="button" id="pickBtn">选择图片</button>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <p class="auto-note" id="autoNote" hidden></p>
+
+    <div class="group">
+      <label for="widthRange">目标宽度 <output id="widthOut">56</output></label>
+      <input type="range" id="widthRange" min="8" max="200" step="1" value="56">
+      <p class="hint" id="sizeHint">—</p>
+    </div>
+
+    <div class="group">
+      <label for="colorRange">最大色数 <output id="colorOut">24</output></label>
+      <input type="range" id="colorRange" min="4" max="72" step="1" value="24">
+      <p class="hint">颜色越少越好买；肤色和渐变建议 24 以上</p>
+    </div>
+
+    <div class="group">
+      <div class="group-title">画面调整 <output id="adjustOut">默认</output></div>
+      <label class="check" for="brightness"><span style="width:44px">亮度</span>
+        <input type="range" id="brightness" min="60" max="140" value="100" style="flex:1"></label>
+      <label class="check" for="contrast"><span style="width:44px">对比</span>
+        <input type="range" id="contrast" min="60" max="150" value="100" style="flex:1"></label>
+      <label class="check" for="saturation"><span style="width:44px">饱和</span>
+        <input type="range" id="saturation" min="0" max="180" value="100" style="flex:1"></label>
+      <label class="check" for="gamma"><span style="width:44px">伽马</span>
+        <input type="range" id="gamma" min="60" max="150" value="100" style="flex:1"></label>
+    </div>
+
+    <div class="group">
+      <label for="bgRange">去掉背景 <output id="bgOut">关</output></label>
+      <input type="range" id="bgRange" min="0" max="60" step="2" value="0">
+      <p class="hint">自动识别背景色后，往右拉会把接近背景的格子留空</p>
+    </div>
+
+    <div class="group">
+      <label class="check" for="mirror"><input type="checkbox" id="mirror"><span>水平镜像</span></label>
+      <label class="check" for="dither"><input type="checkbox" id="dither"><span>误差抖动（不建议开）</span></label>
+    </div>
+  </section>
+
+  <!-- ========== 中：预览 ========== -->
+  <section class="stage" aria-label="图纸预览">
+    <div class="stage-toolbar">
+      <label class="check" for="showGrid"><input type="checkbox" id="showGrid" checked> 网格</label>
+      <label class="check" for="showCodes" title="格子宽度 ≥ 13px 时才显示，可缩小目标宽度或放大窗口"><input type="checkbox" id="showCodes"> 色号</label>
+      <label class="check" for="showBoards"><input type="checkbox" id="showBoards" checked> 板线</label>
+      <span class="sep" aria-hidden="true"></span>
+      <label class="check" for="showOrigin"><input type="checkbox" id="showOrigin"> 淡显原图</label>
+      <span class="grow"></span>
+      <button class="btn btn--ghost" type="button" id="clearFocus" hidden>清除定位</button>
+      <span class="zoom-ctl" role="group" aria-label="图纸缩放">
+        <button type="button" id="zoomOut" title="缩小" aria-label="缩小">−</button>
+        <output id="zoomLabel">100%</output>
+        <button type="button" id="zoomIn" title="放大" aria-label="放大">+</button>
+      </span>
+      <button class="btn" type="button" id="autoBtn" disabled title="重新按图片内容推荐尺寸、色数与背景处理">自动优化</button>
+      <button class="btn" type="button" id="resetView" disabled>适应窗口</button>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="empty-tip" id="emptyTip">
+        <strong>先放一张图进来</strong>
+        <span>支持 PNG / JPG / WebP / GIF 首帧。带透明通道的 PNG 会自动跳过透明格，不会给你算成白豆。</span>
+      </div>
+      <div class="stage-stack" id="stageStack" hidden>
+        <canvas id="preview"></canvas>
+        <canvas id="overlay" aria-hidden="true"></canvas>
+        <div class="cell-tip" id="cellTip" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 右：用量 ========== -->
+  <aside class="panel panel--right" aria-label="用量统计">
+    <dl class="kpis" id="kpis">
+      <div class="kpi"><dt>成品尺寸</dt><dd id="kpiSize">—</dd></div>
+      <div class="kpi"><dt>拼豆板</dt><dd id="kpiBoards">—</dd></div>
+      <div class="kpi"><dt>用豆总数</dt><dd id="kpiBeads">—</dd></div>
+      <div class="kpi"><dt>用色数</dt><dd id="kpiColors">—</dd></div>
+      <div class="kpi kpi--wide"><dt>总重量</dt><dd id="kpiWeight">—</dd></div>
+      <div class="kpi kpi--wide"><dt>建议备货（+10%）</dt><dd id="kpiStock">—</dd></div>
+    </dl>
+
+    <div class="group price-card">
+      <label for="bagPrice">每袋单价 <output id="priceOut">¥5</output></label>
+      <input type="range" id="bagPrice" min="0" max="30" step="0.5" value="5">
+      <p class="hint">上面「建议备货」里的成本按这个价估，按 1000 颗/袋计</p>
+    </div>
+
+    <div class="table-head">
+      <h2>配色用量表</h2>
+      <span id="tableHint">—</span>
+    </div>
+    <p class="table-tip">点任一行，图纸上该颜色的所有格子会亮起</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:26px"></th>
+            <th>色号</th>
+            <th>颜色</th>
+            <th class="r">颗数</th>
+            <th class="r">占比</th>
+            <th class="r">袋</th>
+          </tr>
+        </thead>
+        <tbody id="colorBody">
+          <tr><td colspan="6" style="padding:20px;text-align:center;color:var(--ink-3)">还没有图纸</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="export">
+      <button class="btn btn--accent" type="button" id="exportPng" disabled>导出图纸 PNG</button>
+      <div class="row">
+        <button class="btn" type="button" id="exportCsv" disabled>用量 CSV</button>
+        <button class="btn" type="button" id="exportJson" disabled>工程 JSON</button>
+      </div>
+    </div>
+
+    <div class="notice">
+      <div>
+        <strong>色号说明：</strong>内置色表是通用参考色值（72 色），不是任何品牌的官方色卡。
+        下单前请对着你手上那包豆子的实物色卡核对，色差以实物为准。
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<footer class="foot">
+  <span>换算基准：5mm 豆单颗约 0.06 g（1000 颗 ≈ 60 g）· 2.6mm 豆约 0.01 g（1000 颗 ≈ 10 g）</span>
+  <span>板规格：29×29 钉 / 57×57 钉，一字排开可拼接</span>
+  <span><a href="https://fuse.worldstip.com/">fuse.worldstip.com</a> · MrdT</span>
+</footer>
+
+<script>
+'use strict';
+
+/* ============================================================
+   1. 规格常量
+   数据来源：Perler / Hama midi / Artkal 钉距互通，29×29 方板 = 841 钉 = 14.5cm；
+   mini 2.6mm 方板 57×57 = 3,249 钉 ≈ 14.8cm。
+   重量：5mm 1000 颗实测 59–63g → 0.06g/颗；2.6mm 1000 颗约 10g → 0.01g/颗。
+   ============================================================ */
+const SPECS = {
+  midi: { label: '5mm 标准豆', pitch: 5.0,  boardPegs: 29, beadGrams: 0.06 },
+  mini: { label: '2.6mm 迷你豆', pitch: 2.6, boardPegs: 57, beadGrams: 0.01 }
+};
+
+const BAG_SIZE = 1000;      // 常见袋装颗数
+const STOCK_RATE = 0.10;    // 建议备货比例
+
+/* ============================================================
+   2. 内置通用色表（72 色）
+   注意：这是屏幕参考色值，不是任何品牌的官方色卡；
+   同一色号在不同品牌 / 不同批次之间都会有偏差，下单前请以实物色卡为准。
+   ============================================================ */
+const PALETTE_RAW = [
+  // 无彩阶 8
+  ['M01', '白色',     '#FFFFFF'],
+  ['M02', '米白',     '#F5EFE3'],
+  ['M03', '浅灰',     '#D4D4D4'],
+  ['M04', '中灰',     '#9A9A9A'],
+  ['M05', '深灰',     '#5C5C5C'],
+  ['M06', '黑',       '#1A1A1A'],
+  ['M07', '银灰',     '#B9BEC4'],
+  ['M08', '暖灰',     '#A99E92'],
+  // 红系 8
+  ['M09', '浅粉',     '#F7C6D0'],
+  ['M10', '粉红',     '#F08CA4'],
+  ['M11', '桃红',     '#E85C7A'],
+  ['M12', '正红',     '#D8262C'],
+  ['M13', '深红',     '#A31820'],
+  ['M14', '酒红',     '#6E1220'],
+  ['M15', '砖红',     '#B44A32'],
+  ['M16', '珊瑚',     '#F4836A'],
+  // 橙黄 8
+  ['M17', '柠檬黄',   '#FFE96B'],
+  ['M18', '正黄',     '#FFD21E'],
+  ['M19', '金黄',     '#F2A81D'],
+  ['M20', '橙黄',     '#FF9A1F'],
+  ['M21', '橙',       '#F47B20'],
+  ['M22', '橘红',     '#E8542A'],
+  ['M23', '杏色',     '#F7CBA6'],
+  ['M24', '土黄',     '#C08A2E'],
+  // 绿系 10
+  ['M25', '薄荷',     '#BDEBD6'],
+  ['M26', '浅绿',     '#8FDDA8'],
+  ['M27', '草绿',     '#5FC46A'],
+  ['M28', '正绿',     '#22A345'],
+  ['M29', '墨绿',     '#12693A'],
+  ['M30', '橄榄',     '#7B8B3A'],
+  ['M31', '青柠',     '#C6E04A'],
+  ['M32', '松绿',     '#2E7F6B'],
+  ['M33', '灰绿',     '#8CA593'],
+  ['M34', '豆绿',     '#A8C97F'],
+  // 蓝系 10
+  ['M35', '天蓝',     '#A9D9F5'],
+  ['M36', '湖蓝',     '#4FB6E8'],
+  ['M37', '正蓝',     '#1E7FC4'],
+  ['M38', '深蓝',     '#14539A'],
+  ['M39', '藏青',     '#16305C'],
+  ['M40', '青蓝',     '#35C6CE'],
+  ['M41', '孔雀蓝',   '#1B8A96'],
+  ['M42', '雾蓝',     '#8FB0C9'],
+  ['M43', '牛仔蓝',   '#4A6E9B'],
+  ['M44', '靛青',     '#29456E'],
+  // 紫系 8
+  ['M45', '薰衣草',   '#CFC2EC'],
+  ['M46', '浅紫',     '#A98FDC'],
+  ['M47', '正紫',     '#7B4FC4'],
+  ['M48', '深紫',     '#4E2A85'],
+  ['M49', '梅子',     '#7A2E5C'],
+  ['M50', '藕荷',     '#D3A8C0'],
+  ['M51', '葡萄',     '#5A2E70'],
+  ['M52', '兰紫',     '#9B6BD6'],
+  // 棕与肤色 10
+  ['M53', '奶白肤',   '#FCE7D6'],
+  ['M54', '浅肤',     '#F5C9A8'],
+  ['M55', '肤色',     '#E8AE80'],
+  ['M56', '深肤',     '#C48559'],
+  ['M57', '驼色',     '#D2A46A'],
+  ['M58', '沙色',     '#E4D2B4'],
+  ['M59', '咖啡',     '#8E5A3C'],
+  ['M60', '可可',     '#6B4327'],
+  ['M61', '巧克力',   '#4A2C1A'],
+  ['M62', '栗色',     '#6E3B2A'],
+  // 特殊 10
+  ['M63', '透明',     '#ECECE9'],
+  ['M64', '荧光黄',   '#F5F53A'],
+  ['M65', '荧光橙',   '#FF8A1E'],
+  ['M66', '荧光粉',   '#FF6FB5'],
+  ['M67', '荧光绿',   '#8CFF4A'],
+  ['M68', '荧光蓝',   '#4AD9FF'],
+  ['M69', '金属银',   '#C8CDD2'],
+  ['M70', '金色',     '#D4AF37'],
+  ['M71', '玫瑰金',   '#E0B0A0'],
+  ['M72', '夜光绿',   '#D8F5C0']
+];
+
+/* ============================================================
+   3. 颜色科学
+   匹配用 CIELAB + CIEDE2000，而不是 RGB 欧氏距离：
+   RGB 空间不均匀，直接算距离会挑出肉眼一看就不对的颜色。
+   ============================================================ */
+function hexToRgb(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+
+// sRGB → 线性光
+function srgbToLinear(c) {
+  c /= 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+const LAB_XN = 0.95047, LAB_YN = 1.0, LAB_ZN = 1.08883;
+const EPS = 216 / 24389, KAPPA = 24389 / 27;
+
+function fLab(t) {
+  return t > EPS ? Math.cbrt(t) : (KAPPA * t + 16) / 116;
+}
+
+// RGB → CIELAB（D65 白点）
+function rgbToLab(r, g, b) {
+  const lr = srgbToLinear(r), lg = srgbToLinear(g), lb = srgbToLinear(b);
+  const X = lr * 0.4124564 + lg * 0.3575761 + lb * 0.1804375;
+  const Y = lr * 0.2126729 + lg * 0.7151522 + lb * 0.0721750;
+  const Z = lr * 0.0193339 + lg * 0.1191920 + lb * 0.9503041;
+  const fx = fLab(X / LAB_XN), fy = fLab(Y / LAB_YN), fz = fLab(Z / LAB_ZN);
+  return { L: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) };
+}
+
+// CIEDE2000 色差（kL = kC = kH = 1）
+function ciede2000(l1, l2) {
+  const C1 = Math.hypot(l1.a, l1.b);
+  const C2 = Math.hypot(l2.a, l2.b);
+  const Cbar = (C1 + C2) / 2;
+  const Cbar7 = Math.pow(Cbar, 7);
+  const G = 0.5 * (1 - Math.sqrt(Cbar7 / (Cbar7 + 6103515625))); // 25^7
+
+  const a1p = (1 + G) * l1.a, a2p = (1 + G) * l2.a;
+  const C1p = Math.hypot(a1p, l1.b), C2p = Math.hypot(a2p, l2.b);
+
+  let h1p = Math.atan2(l1.b, a1p);
+  if (h1p < 0) h1p += Math.PI * 2;
+  let h2p = Math.atan2(l2.b, a2p);
+  if (h2p < 0) h2p += Math.PI * 2;
+
+  const dLp = l2.L - l1.L;
+  const dCp = C2p - C1p;
+
+  let dhp;
+  if (C1p * C2p === 0) dhp = 0;
+  else if (Math.abs(h2p - h1p) <= Math.PI) dhp = h2p - h1p;
+  else if (h2p <= h1p) dhp = h2p - h1p + Math.PI * 2;
+  else dhp = h2p - h1p - Math.PI * 2;
+
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(dhp / 2);
+
+  const Lbar = (l1.L + l2.L) / 2;
+  const Cbarp = (C1p + C2p) / 2;
+
+  let hbarp;
+  if (C1p * C2p === 0) hbarp = h1p + h2p;
+  else if (Math.abs(h1p - h2p) <= Math.PI) hbarp = (h1p + h2p) / 2;
+  else if (h1p + h2p < Math.PI * 2) hbarp = (h1p + h2p + Math.PI * 2) / 2;
+  else hbarp = (h1p + h2p - Math.PI * 2) / 2;
+
+  const T = 1
+    - 0.17 * Math.cos(hbarp - Math.PI / 6)
+    + 0.24 * Math.cos(2 * hbarp)
+    + 0.32 * Math.cos(3 * hbarp + Math.PI / 30)
+    - 0.20 * Math.cos(4 * hbarp - Math.PI * 0.7);
+
+  const dTheta = (Math.PI / 6) * Math.exp(-Math.pow((hbarp * 180 / Math.PI - 275) / 25, 2));
+  const Cbarp7 = Math.pow(Cbarp, 7);
+  const RC = 2 * Math.sqrt(Cbarp7 / (Cbarp7 + 6103515625));
+  const L2 = Math.pow(Lbar - 50, 2);
+  const SL = 1 + (0.015 * L2) / Math.sqrt(20 + L2);
+  const SC = 1 + 0.045 * Cbarp;
+  const SH = 1 + 0.015 * Cbarp * T;
+  const RT = -Math.sin(2 * dTheta) * RC;
+
+  return Math.sqrt(
+    Math.pow(dLp / SL, 2) +
+    Math.pow(dCp / SC, 2) +
+    Math.pow(dHp / SH, 2) +
+    RT * (dCp / SC) * (dHp / SH)
+  );
+}
+
+// 预计算色卡的 Lab 值，避免重复转换
+const PALETTE = PALETTE_RAW.map(([code, name, hex]) => {
+  const { r, g, b } = hexToRgb(hex);
+  return { code, name, hex, r, g, b, lab: rgbToLab(r, g, b) };
+});
+
+/* ============================================================
+   4. 状态与 DOM
+   ============================================================ */
+const state = {
+  spec: SPECS.midi,
+  srcCanvas: null,
+  srcW: 0,
+  srcH: 0,
+  W: 0,
+  H: 0,
+  grid: null,      // Int16Array，存色卡索引；-1 表示空格
+  mask: null,      // Uint8Array，1 = 空白钉位
+  counts: null,    // Map<index, count>
+  total: 0,
+  isDemo: false,   // 内置示例是像素图，缩放必须用最近邻，否则边缘糊出杂色
+  bgColor: null,   // 自动检测到的背景色；有值时按色差剔除，比"只剔浅色"通用
+  focusColor: -1,  // 正在定位的色卡索引；-1 表示不高亮
+  layout: null,    // 最近一次绘制的几何参数，供 overlay 与坐标换算复用
+  hover: null,     // 鼠标所在格 {x, y}，0 基
+  zoom: 1,         // 显示倍率；1 = 适应窗口，靠改 CSS 尺寸实现，不用 transform 以免糊
+  renderToken: 0
+};
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  drop: $('drop'), pickBtn: $('pickBtn'), fileInput: $('fileInput'),
+  widthRange: $('widthRange'), widthOut: $('widthOut'), sizeHint: $('sizeHint'),
+  colorRange: $('colorRange'), colorOut: $('colorOut'),
+  brightness: $('brightness'), contrast: $('contrast'),
+  saturation: $('saturation'), gamma: $('gamma'), adjustOut: $('adjustOut'),
+  bgRange: $('bgRange'), bgOut: $('bgOut'),
+  mirror: $('mirror'), dither: $('dither'),
+  bagPrice: $('bagPrice'), priceOut: $('priceOut'),
+  showGrid: $('showGrid'), showCodes: $('showCodes'),
+  showBoards: $('showBoards'), showOrigin: $('showOrigin'),
+  resetView: $('resetView'),
+  canvasWrap: $('canvasWrap'), emptyTip: $('emptyTip'), preview: $('preview'),
+  kpiSize: $('kpiSize'), kpiBoards: $('kpiBoards'), kpiBeads: $('kpiBeads'),
+  kpiColors: $('kpiColors'), kpiWeight: $('kpiWeight'), kpiStock: $('kpiStock'),
+  colorBody: $('colorBody'), tableHint: $('tableHint'),
+  exportPng: $('exportPng'), exportCsv: $('exportCsv'), exportJson: $('exportJson'),
+  autoBtn: $('autoBtn'), autoNote: $('autoNote'),
+  stageStack: $('stageStack'), overlay: $('overlay'), cellTip: $('cellTip'),
+  clearFocus: $('clearFocus'),
+  zoomIn: $('zoomIn'), zoomOut: $('zoomOut'), zoomLabel: $('zoomLabel'),
+  themeBtn: $('themeBtn'), themeName: $('themeName')
+};
+
+const ctx = els.preview.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* ============================================================
+   5. 图片载入
+   ============================================================ */
+const MAX_SOURCE = 1800;   // 源图最长边上限，够用且省内存
+
+function loadImageElement(img, isDemo) {
+  state.isDemo = !!isDemo;
+  const scale = Math.min(1, MAX_SOURCE / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const c2 = c.getContext('2d');
+  c2.imageSmoothingQuality = 'high';
+  c2.drawImage(img, 0, 0, w, h);
+
+  // 图片一进来就先自己判断一遍：背景、空白边、色数、尺寸
+  let work = c;
+  if (isDemo) {
+    state.bgColor = null;
+    els.bgRange.value = '0';
+    els.colorRange.value = '24';
+    els.widthRange.value = '56';
+    els.autoNote.hidden = true;
+  } else {
+    const tuned = autoTune(c);
+    work = tuned.canvas;
+    showAutoNote(tuned.text, tuned.ok);
+  }
+
+  state.srcCanvas = work;
+  state.srcW = work.width;
+  state.srcH = work.height;
+
+  updateLabelOutputs();
+  showControls();
+
+  els.emptyTip.hidden = true;
+  els.stageStack.hidden = false;
+  els.stageStack.classList.remove('is-fresh');
+  void els.stageStack.offsetWidth;      // 重启动画
+  els.stageStack.classList.add('is-fresh');
+  els.resetView.disabled = false;
+
+  rebuild();
+}
+
+function showControls() {
+  [
+    els.exportPng, els.exportCsv, els.exportJson,
+    els.showGrid, els.showCodes, els.showBoards, els.showOrigin,
+    els.autoBtn
+  ].forEach((el) => { el.disabled = false; });
+}
+
+function loadFromFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('这不是图片文件');
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    loadImageElement(img);
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    alert('图片解码失败，换一张试试');
+  };
+  img.src = url;
+}
+
+/* ============================================================
+   5.5 自动分析：导入即判断，不用手调参数
+   三件事：找背景 / 裁空白边 / 按复杂度推荐色数与尺寸。
+   ============================================================ */
+
+// 采样外框一圈像素，判断这张图有没有"统一背景"
+function detectBackground(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const g = canvas.getContext('2d', { willReadFrequently: true });
+  const d = g.getImageData(0, 0, w, h).data;
+  const band = Math.max(2, Math.round(Math.min(w, h) * 0.045));
+
+  let n = 0, sr = 0, sg = 0, sb = 0, sl = 0, sl2 = 0;
+  const take = (x, y) => {
+    const p = (y * w + x) * 4;
+    if (d[p + 3] < 200) return;            // 透明像素不参与背景色估计
+    const r = d[p], gg = d[p + 1], b = d[p + 2];
+    const lum = 0.299 * r + 0.587 * gg + 0.114 * b;
+    sr += r; sg += gg; sb += b; sl += lum; sl2 += lum * lum; n++;
+  };
+
+  for (let y = 0; y < band; y++) {
+    for (let x = 0; x < w; x += 2) { take(x, y); take(x, h - 1 - y); }
+  }
+  for (let x = 0; x < band; x++) {
+    for (let y = 0; y < h; y += 2) { take(x, y); take(w - 1 - x, y); }
+  }
+  if (n < 8) return null;
+
+  const ml = sl / n;
+  const std = Math.sqrt(Math.max(0, sl2 / n - ml * ml));
+  return {
+    r: Math.round(sr / n), g: Math.round(sg / n), b: Math.round(sb / n),
+    lum: ml, std, samples: n
+  };
+}
+
+function toHex(r, g, b) {
+  return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+// 裁掉与背景同色的整行整列（只在边缘 0.5% 容错内判定，避免啃掉主体）
+function trimCanvas(canvas, bg, tol) {
+  const w = canvas.width, h = canvas.height;
+  const g = canvas.getContext('2d', { willReadFrequently: true });
+  const d = g.getImageData(0, 0, w, h).data;
+
+  const isBgAt = (x, y) => {
+    const p = (y * w + x) * 4;
+    if (d[p + 3] < 128) return true;
+    return Math.max(
+      Math.abs(d[p] - bg.r), Math.abs(d[p + 1] - bg.g), Math.abs(d[p + 2] - bg.b)
+    ) <= tol;
+  };
+
+  const rowIsBg = (y) => {
+    let hit = 0, total = 0;
+    for (let x = 0; x < w; x += 2) { total++; if (isBgAt(x, y)) hit++; }
+    return total > 0 && hit / total >= 0.995;
+  };
+  const colIsBg = (x) => {
+    let hit = 0, total = 0;
+    for (let y = 0; y < h; y += 2) { total++; if (isBgAt(x, y)) hit++; }
+    return total > 0 && hit / total >= 0.995;
+  };
+
+  let top = 0;
+  while (top < h - 1 && rowIsBg(top)) top++;
+  let bottom = h - 1;
+  while (bottom > top && rowIsBg(bottom)) bottom--;
+  let left = 0;
+  while (left < w - 1 && colIsBg(left)) left++;
+  let right = w - 1;
+  while (right > left && colIsBg(right)) right--;
+
+  const tw = right - left + 1, th = bottom - top + 1;
+
+  // 裁得太狠说明判断有问题（例如整图都是背景色），放弃裁剪
+  if (tw < w * 0.12 || th < h * 0.12) {
+    return { canvas, ratio: 0 };
+  }
+
+  const out = document.createElement('canvas');
+  out.width = tw; out.height = th;
+  const oc = out.getContext('2d');
+  oc.drawImage(canvas, left, top, tw, th, 0, 0, tw, th);
+
+  return { canvas: out, ratio: 1 - (tw * th) / (w * h) };
+}
+
+// 数一数这张图大概有多少种颜色（缩到 40×40 + 4bit 量化，抗噪）
+function countColors(canvas) {
+  const N = 40;
+  const c = document.createElement('canvas');
+  c.width = N; c.height = N;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingEnabled = false;
+  g.drawImage(canvas, 0, 0, N, N);
+  const d = g.getImageData(0, 0, N, N).data;
+
+  const set = new Set();
+  for (let i = 0; i < N * N; i++) {
+    const p = i * 4;
+    if (d[p + 3] < 128) continue;
+    set.add(((d[p] >> 4) << 8) | ((d[p + 1] >> 4) << 4) | (d[p + 2] >> 4));
+  }
+  return set.size;
+}
+
+// 色数：图越复杂给越多，但整体压住（每多一色就多一袋要买）
+function recommendColors(u) {
+  if (u <= 6) return 8;
+  if (u <= 14) return 12;
+  if (u <= 30) return 16;
+  if (u <= 70) return 24;
+  if (u <= 150) return 32;
+  return 40;
+}
+
+// 尺寸：默认按"成品宽约 22cm"给，细节多或长条图再加宽
+function recommendWidth(u, aspect) {
+  const midi = state.spec === SPECS.midi;
+  let w = midi ? 44 : 84;
+  if (u > 90) w = midi ? 58 : 110;
+  if (aspect > 1.8) w = Math.round(w * 1.25);
+  if (aspect < 0.55) w = Math.round(w * 1.15);   // 竖图别太窄
+  return Math.max(8, Math.min(200, w));
+}
+
+// 一次跑完三件事，返回裁剪后的 canvas 与给用户看的说明
+function autoTune(canvas) {
+  const notes = [];
+  let work = canvas;
+  let ok = true;
+
+  const bg = detectBackground(work);
+  const uniform = bg && bg.std <= 15;
+  const isLight = bg && bg.lum > 205;
+  const isDark = bg && bg.lum < 70;
+
+  if (uniform && (isLight || isDark)) {
+    const tol = 16;
+    const trimmed = trimCanvas(work, bg, tol);
+    if (trimmed.ratio > 0.03) {
+      work = trimmed.canvas;
+      notes.push(`裁掉 ${Math.round(trimmed.ratio * 100)}% 空白边`);
+    }
+    state.bgColor = { r: bg.r, g: bg.g, b: bg.b };
+    els.bgRange.value = String(tol);
+    notes.push(`去背景 ${toHex(bg.r, bg.g, bg.b)}`);
+  } else {
+    state.bgColor = null;
+    els.bgRange.value = '0';
+    ok = false;
+  }
+
+  const u = countColors(work);
+  const colors = recommendColors(u);
+  const width = recommendWidth(u, work.width / work.height);
+  els.colorRange.value = String(colors);
+  els.widthRange.value = String(width);
+
+  notes.unshift(`${width} 颗宽 · ${colors} 色`);
+
+  const text = ok
+    ? `已自动：${notes.join(' · ')}<br>可以直接导出，也可以继续微调。`
+    : `已自动：${notes.join(' · ')}<br>没发现统一背景，如需去底请手动拉"去掉背景"。`;
+
+  return { canvas: work, text, ok };
+}
+
+function showAutoNote(text, ok) {
+  els.autoNote.innerHTML = text;
+  els.autoNote.classList.toggle('is-plain', !ok);
+  els.autoNote.hidden = false;
+}
+
+/* ============================================================
+   6. 采样：把源图落到 W×H 的豆格上
+   分级减半再缩到目标尺寸，等效于块内面积平均，
+   比直接一步缩小的细节保留更好（一步缩小在大比例时容易糊）。
+   ============================================================ */
+function resample(W, H) {
+  const src = state.srcCanvas;
+  const smooth = !state.isDemo;
+  let cur = src;
+
+  const flip = els.mirror.checked;
+  if (flip) {
+    const f = document.createElement('canvas');
+    f.width = src.width; f.height = src.height;
+    const fc = f.getContext('2d');
+    fc.translate(src.width, 0);
+    fc.scale(-1, 1);
+    fc.drawImage(src, 0, 0);
+    cur = f;
+  }
+
+  // 逐级减半，直到再减就小于目标（像素图跳过，直接一步最近邻）
+  while (smooth && cur.width >= W * 2 && cur.height >= H * 2) {
+    const nw = Math.max(W, Math.floor(cur.width / 2));
+    const nh = Math.max(H, Math.floor(cur.height / 2));
+    const c = document.createElement('canvas');
+    c.width = nw; c.height = nh;
+    const cc = c.getContext('2d');
+    cc.imageSmoothingEnabled = true;
+    cc.imageSmoothingQuality = 'high';
+    cc.drawImage(cur, 0, 0, nw, nh);
+    cur = c;
+  }
+
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const oc = out.getContext('2d', { willReadFrequently: true });
+  oc.imageSmoothingEnabled = smooth;
+  if (smooth) oc.imageSmoothingQuality = 'high';
+  oc.drawImage(cur, 0, 0, W, H);
+
+  return oc.getImageData(0, 0, W, H).data;
+}
+
+/* ============================================================
+   7. 调色与空白判定
+   ============================================================ */
+function applyAdjustments(data, W, H) {
+  const bright = Number(els.brightness.value) / 100;
+  const contrast = Number(els.contrast.value) / 100;
+  const sat = Number(els.saturation.value) / 100;
+  const gamma = Number(els.gamma.value) / 100;
+  const bgCut = Number(els.bgRange.value);
+
+  const rgb = new Float32Array(W * H * 3);
+  const mask = new Uint8Array(W * H);
+  const invGamma = gamma > 0 ? 1 / gamma : 1;
+  const bgThr = 255 - bgCut;   // 无背景色时的浅色阈值
+
+  for (let i = 0, p = 0; i < W * H; i++, p += 4) {
+    let r = data[p], g = data[p + 1], b = data[p + 2];
+    const a = data[p + 3];
+
+    // 透明像素直接留空，不参与配色，也不计入用量
+    if (a < 128) { mask[i] = 1; continue; }
+
+    // 背景剔除：检测到背景色就按色差判断（深浅背景都能处理），
+    // 没检测到则退回"三通道都很亮"的浅色规则，避免误伤高光
+    if (bgCut > 0) {
+      if (state.bgColor) {
+        const bd = state.bgColor;
+        const diff = Math.max(
+          Math.abs(r - bd.r), Math.abs(g - bd.g), Math.abs(b - bd.b)
+        );
+        if (diff <= bgCut) { mask[i] = 1; continue; }
+      } else if (Math.min(r, g, b) >= bgThr) {
+        mask[i] = 1; continue;
+      }
+    }
+
+    // 亮度
+    if (bright !== 1) { r *= bright; g *= bright; b *= bright; }
+
+    // 对比：围绕中灰拉伸
+    if (contrast !== 1) {
+      r = (r - 128) * contrast + 128;
+      g = (g - 128) * contrast + 128;
+      b = (b - 128) * contrast + 128;
+    }
+
+    // 饱和度：向亮度插值
+    if (sat !== 1) {
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = lum + (r - lum) * sat;
+      g = lum + (g - lum) * sat;
+      b = lum + (b - lum) * sat;
+    }
+
+    // 伽马
+    if (invGamma !== 1) {
+      r = 255 * Math.pow(Math.max(0, Math.min(255, r)) / 255, invGamma);
+      g = 255 * Math.pow(Math.max(0, Math.min(255, g)) / 255, invGamma);
+      b = 255 * Math.pow(Math.max(0, Math.min(255, b)) / 255, invGamma);
+    }
+
+    const k = i * 3;
+    rgb[k]     = Math.max(0, Math.min(255, r));
+    rgb[k + 1] = Math.max(0, Math.min(255, g));
+    rgb[k + 2] = Math.max(0, Math.min(255, b));
+  }
+
+  return { rgb, mask };
+}
+
+/* ============================================================
+   8. 匹配色卡
+   用 RGB555 桶做缓存：同色只算一次 CIEDE2000，
+   否则 200×200 格 × 72 色 = 288 万次色差，明显卡顿。
+   ============================================================ */
+const matchCache = new Map();
+
+function nearestIndex(r, g, b) {
+  const ri = r | 0, gi = g | 0, bi = b | 0;
+  const key = ((ri >> 3) << 10) | ((gi >> 3) << 5) | (bi >> 3);
+  const hit = matchCache.get(key);
+  if (hit !== undefined) return hit;
+
+  const lab = rgbToLab(ri, gi, bi);
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < PALETTE.length; i++) {
+    const d = ciede2000(lab, PALETTE[i].lab);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  matchCache.set(key, best);
+  return best;
+}
+
+/* ============================================================
+   9. 误差抖动（Floyd–Steinberg）
+   拼豆上默认关闭：抖动会撒出大量零星第四第五色，
+   实物远看发脏，而且每种多出来的颜色都要多买一袋。
+   ============================================================ */
+function matchWithDither(rgb, mask, W, H) {
+  const buf = Float32Array.from(rgb);
+  const out = new Int16Array(W * H);
+
+  const push = (i, er, eg, eb, f) => {
+    buf[i * 3]     += er * f;
+    buf[i * 3 + 1] += eg * f;
+    buf[i * 3 + 2] += eb * f;
+  };
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (mask[i]) { out[i] = -1; continue; }
+
+      const r = buf[i * 3], g = buf[i * 3 + 1], b = buf[i * 3 + 2];
+      const idx = nearestIndex(
+        Math.max(0, Math.min(255, r)),
+        Math.max(0, Math.min(255, g)),
+        Math.max(0, Math.min(255, b))
+      );
+      out[i] = idx;
+
+      const p = PALETTE[idx];
+      const er = r - p.r, eg = g - p.g, eb = b - p.b;
+
+      const right = i + 1, bl = i + W - 1, bottom = i + W, br = i + W + 1;
+      if (x + 1 < W && !mask[right]) push(right, er, eg, eb, 7 / 16);
+      if (y + 1 < H) {
+        if (x > 0 && !mask[bl]) push(bl, er, eg, eb, 3 / 16);
+        if (!mask[bottom]) push(bottom, er, eg, eb, 5 / 16);
+        if (x + 1 < W && !mask[br]) push(br, er, eg, eb, 1 / 16);
+      }
+    }
+  }
+  return out;
+}
+
+function matchDirect(rgb, mask, W, H) {
+  const out = new Int16Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    if (mask[i]) { out[i] = -1; continue; }
+    out[i] = nearestIndex(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+  }
+  return out;
+}
+
+/* ============================================================
+   10. 色数裁剪
+   做法：把用得最少的颜色反复合并到它最近的保留色上。
+   保留色只会被动"吸收"别的格子，不会消失，所以一轮扫描足够。
+   ============================================================ */
+function pruneColors(grid, maxColors) {
+  const counts = new Map();
+  for (let i = 0; i < grid.length; i++) {
+    const v = grid[i];
+    if (v < 0) continue;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+
+  if (counts.size <= maxColors) return counts;
+
+  const used = Array.from(counts.keys());
+  // 按用量升序，方便每次摘掉最不常用的那个
+  used.sort((a, b) => counts.get(a) - counts.get(b));
+
+  const alive = new Set(used);
+
+  while (alive.size > maxColors) {
+    // 取当前用量最少的
+    let victim = null, victimCount = Infinity;
+    alive.forEach((idx) => {
+      const c = counts.get(idx);
+      if (c < victimCount) { victimCount = c; victim = idx; }
+    });
+
+    // 找最近的保留色
+    let target = null, bestD = Infinity;
+    alive.forEach((idx) => {
+      if (idx === victim) return;
+      const d = ciede2000(PALETTE[victim].lab, PALETTE[idx].lab);
+      // 距离相同时优先合并到用量更大的颜色，保住主色
+      if (d < bestD - 1e-9 || (Math.abs(d - bestD) <= 1e-9 && counts.get(idx) > counts.get(target))) {
+        bestD = d; target = idx;
+      }
+    });
+
+    if (target == null) break;
+
+    // 就地替换
+    for (let i = 0; i < grid.length; i++) {
+      if (grid[i] === victim) grid[i] = target;
+    }
+    counts.set(target, counts.get(target) + victimCount);
+    counts.delete(victim);
+    alive.delete(victim);
+  }
+
+  return counts;
+}
+
+/* ============================================================
+   11. 主流程：重算
+   ============================================================ */
+function rebuild() {
+  if (!state.srcCanvas) return;
+
+  const W = Math.max(8, Math.min(200, Number(els.widthRange.value)));
+  const H = Math.max(1, Math.round(W * state.srcH / state.srcW));
+  state.W = W;
+  state.H = H;
+
+  const raw = resample(W, H);
+  const { rgb, mask } = applyAdjustments(raw, W, H);
+
+  // 保存原图缩略，供"淡显原图"叠加
+  const thumb = document.createElement('canvas');
+  thumb.width = W; thumb.height = H;
+  const tc = thumb.getContext('2d', { willReadFrequently: true });
+  const td = tc.createImageData(W, H);
+  for (let i = 0; i < W * H; i++) {
+    const p = i * 4, k = i * 3;
+    td.data[p] = rgb[k];
+    td.data[p + 1] = rgb[k + 1];
+    td.data[p + 2] = rgb[k + 2];
+    td.data[p + 3] = mask[i] ? 0 : 255;
+  }
+  tc.putImageData(td, 0, 0);
+  state.thumb = thumb;
+
+  const grid = els.dither.checked
+    ? matchWithDither(rgb, mask, W, H)
+    : matchDirect(rgb, mask, W, H);
+
+  const maxColors = Number(els.colorRange.value);
+  state.counts = pruneColors(grid, maxColors);
+  state.grid = grid;
+  state.mask = mask;
+
+  let total = 0;
+  state.counts.forEach((c) => { total += c; });
+  state.total = total;
+
+  // 色数被裁掉后，原来定位的颜色可能已经不存在了
+  if (state.focusColor >= 0 && !state.counts.has(state.focusColor)) {
+    state.focusColor = -1;
+  }
+
+  updateHints();
+  updateStats();
+  draw();
+}
+
+/* ============================================================
+   12. 物理量与统计
+   ============================================================ */
+function cmPerBead() { return state.spec.pitch / 10; }
+
+function boardGrid() {
+  const pegs = state.spec.boardPegs;
+  return {
+    cols: Math.ceil(state.W / pegs),
+    rows: Math.ceil(state.H / pegs)
+  };
+}
+
+function fmtNum(n) {
+  return n.toLocaleString('zh-CN');
+}
+
+function updateHints() {
+  const W = state.W, H = state.H;
+  const cm = cmPerBead();
+  const b = boardGrid();
+  const wcm = (W * cm).toFixed(1);
+  const hcm = (H * cm).toFixed(1);
+  const boards = b.cols * b.rows;
+  els.sizeHint.textContent =
+    `${W} × ${H} 颗 · 成品 ${wcm} × ${hcm} cm · ` +
+    (boards === 1 ? '1 块板放得下' : `${b.rows} 行 × ${b.cols} 列 = ${boards} 块板`);
+}
+
+function updateStats() {
+  const count = state.counts ? state.counts.size : 0;
+  const total = state.total;
+  const cm = cmPerBead();
+  const b = boardGrid();
+  const boards = b.cols * b.rows;
+  const grams = total * state.spec.beadGrams;
+
+  els.kpiSize.innerHTML =
+    `${(state.W * cm).toFixed(1)} × ${(state.H * cm).toFixed(1)}<span>cm</span>`;
+  els.kpiBoards.innerHTML =
+    `${boards}<span>块</span>${boards > 1 ? ` <small style="font-size:11px;color:var(--ink-3)">${b.rows}×${b.cols}</small>` : ''}`;
+  els.kpiBeads.innerHTML = `${fmtNum(total)}<span>颗</span>`;
+  els.kpiColors.innerHTML = `${count}<span>色</span>`;
+
+  els.kpiWeight.innerHTML = grams >= 1000
+    ? `${(grams / 1000).toFixed(2)}<span>kg</span>`
+    : `${Math.round(grams)}<span>g</span>`;
+
+  // 备货：逐色上浮 10% 后向上取整袋
+  const price = Number(els.bagPrice.value);
+  let bags = 0;
+  if (state.counts) {
+    state.counts.forEach((c) => {
+      bags += Math.ceil((c * (1 + STOCK_RATE)) / BAG_SIZE);
+    });
+  }
+  const cost = bags * price;
+  els.kpiStock.innerHTML =
+    `${bags}<span>袋</span> <small style="font-size:11px;color:var(--ink-3)">≈ ¥${cost.toFixed(0)}</small>`;
+
+  renderTable();
+
+  if (state.counts && state.focusColor >= 0 && state.counts.has(state.focusColor)) {
+    els.tableHint.textContent =
+      `定位 ${PALETTE[state.focusColor].code} · ${fmtNum(state.counts.get(state.focusColor))} 颗`;
+  } else {
+    els.tableHint.textContent = state.counts ? `${count} 色 · ${fmtNum(total)} 颗` : '—';
+  }
+}
+
+function renderTable() {
+  const body = els.colorBody;
+  if (!state.counts || state.counts.size === 0) {
+    body.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--ink-3)">还没有图纸</td></tr>';
+    return;
+  }
+
+  const rows = Array.from(state.counts.entries())
+    .sort((a, b) => b[1] - a[1]);
+
+  const total = state.total || 1;
+  const frag = document.createDocumentFragment();
+
+  rows.forEach(([idx, count]) => {
+    const p = PALETTE[idx];
+    const ratio = count / total;
+    const bags = Math.ceil((count * (1 + STOCK_RATE)) / BAG_SIZE);
+
+    const tr = document.createElement('tr');
+    tr.dataset.idx = String(idx);
+    tr.title = `${p.code} ${p.name} · 点击定位`;
+    if (idx === state.focusColor) tr.classList.add('is-focus');
+    tr.innerHTML =
+      `<td><span class="swatch" style="background:${p.hex}"></span></td>` +
+      `<td class="code">${p.code}</td>` +
+      `<td>${p.name}</td>` +
+      `<td class="r num">${fmtNum(count)}</td>` +
+      `<td class="r"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">` +
+        `<span class="num" style="font-size:11px;color:var(--ink-3)">${(ratio * 100).toFixed(1)}%</span>` +
+        `<span class="bar"><i style="width:${(ratio * 100).toFixed(1)}%"></i></span>` +
+      `</div></td>` +
+      `<td class="r num">${bags}</td>`;
+    frag.appendChild(tr);
+  });
+
+  body.replaceChildren(frag);
+}
+
+/* ============================================================
+   13. 预览绘制
+   ============================================================ */
+
+/* 画布内部的颜色也在 CSS 变量里定义，这样换主题时图纸跟着变。
+   每次绘制读一次，成本可以忽略。 */
+const tc = {};
+function readThemeColors() {
+  const s = getComputedStyle(document.documentElement);
+  const pick = (name, fallback) => (s.getPropertyValue(name) || '').trim() || fallback;
+  tc.empty    = pick('--canvas-empty', '#F7F7F9');
+  tc.grid     = pick('--canvas-grid', 'rgba(0,0,0,0.10)');
+  tc.rulerBg  = pick('--ruler-bg', '#ECECEF');
+  tc.rulerInk = pick('--ruler-ink', '#8E8E93');
+  tc.board    = pick('--board-line', '#0071E3');
+}
+
+function draw() {
+  if (!state.grid) return;
+
+  const W = state.W, H = state.H;
+
+  // 首次调用时容器可能还没完成布局，宽度会异常；回退到视口估算
+  let wrapW = els.canvasWrap.clientWidth;
+  if (!wrapW || wrapW > 2200) wrapW = Math.min(1200, window.innerWidth - 640);
+  const avail = Math.max(240, wrapW - 44);
+
+  // 预留一格宽绘制行号/列号；格子太小就放弃标尺，优先保证图纸本身够大
+  let pad = 1;
+  let cell = Math.floor(avail / (W + pad));
+  if (cell < 11) { pad = 0; cell = Math.floor(avail / W); }
+  cell = Math.max(4, Math.min(24, cell));
+
+  const ox = pad * cell, oy = pad * cell;
+  const cw = (W + pad) * cell;
+  const chh = (H + pad) * cell;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+  state.layout = { cell, pad, ox, oy, cw, chh, dpr };
+
+  // 画布的像素尺寸固定，显示尺寸由倍率决定（image-rendering: pixelated 保证放大后仍是硬边）
+  els.preview.width = Math.round(cw * dpr);
+  els.preview.height = Math.round(chh * dpr);
+
+  els.overlay.width = els.preview.width;
+  els.overlay.height = els.preview.height;
+
+  applyZoomSize();
+
+  readThemeColors();
+
+  const g = els.preview.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, cw, chh);
+
+  // 空钉位底色
+  g.fillStyle = tc.empty;
+  g.fillRect(ox, oy, W * cell, H * cell);
+
+  // 豆子：正在定位某个颜色时，其余格子压暗，分两遍画避免逐格切 alpha
+  const focus = state.focusColor;
+  const passes = focus >= 0 ? [[0.13, false], [1, true]] : [[1, null]];
+  for (let pi = 0; pi < passes.length; pi++) {
+    g.globalAlpha = passes[pi][0];
+    const onlyFocus = passes[pi][1];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = state.grid[y * W + x];
+        if (idx < 0) continue;
+        if (onlyFocus !== null && (idx === focus) !== onlyFocus) continue;
+        g.fillStyle = PALETTE[idx].hex;
+        g.fillRect(ox + x * cell, oy + y * cell, cell, cell);
+      }
+    }
+  }
+  g.globalAlpha = 1;
+
+  // 淡显原图：只在格够大时叠加，否则只会糊成一片
+  if (els.showOrigin.checked && state.thumb && cell >= 3) {
+    g.save();
+    g.globalAlpha = focus >= 0 ? 0.12 : 0.3;
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(state.thumb, ox, oy, W * cell, H * cell);
+    g.restore();
+    g.imageSmoothingEnabled = false;
+  }
+
+  // 网格线
+  if (els.showGrid.checked && cell >= 5) {
+    g.beginPath();
+    for (let x = 1; x < W; x++) {
+      const px = ox + x * cell + 0.5;
+      g.moveTo(px, oy); g.lineTo(px, oy + H * cell);
+    }
+    for (let y = 1; y < H; y++) {
+      const py = oy + y * cell + 0.5;
+      g.moveTo(ox, py); g.lineTo(ox + W * cell, py);
+    }
+    g.strokeStyle = tc.grid;
+    g.lineWidth = 1;
+    g.stroke();
+  }
+
+  // 板线：标出每块板的边界，避免拼到一半发现错位
+  if (els.showBoards.checked) {
+    const pegs = state.spec.boardPegs;
+    const b = boardGrid();
+    if (b.cols > 1 || b.rows > 1) {
+      g.strokeStyle = tc.board;
+      g.lineWidth = 2;
+      g.beginPath();
+      for (let c = 1; c < b.cols; c++) {
+        const x = ox + Math.min(c * pegs, W) * cell + 0.5;
+        g.moveTo(x, oy); g.lineTo(x, oy + H * cell);
+      }
+      for (let r = 1; r < b.rows; r++) {
+        const y = oy + Math.min(r * pegs, H) * cell + 0.5;
+        g.moveTo(ox, y); g.lineTo(ox + W * cell, y);
+      }
+      g.stroke();
+
+      g.font = '600 10px ' + getComputedStyle(document.body).fontFamily;
+      g.textAlign = 'left';
+      g.textBaseline = 'top';
+      for (let r = 0; r < b.rows; r++) {
+        for (let c = 0; c < b.cols; c++) {
+          const x = ox + c * pegs * cell + 4;
+          const y = oy + r * pegs * cell + 4;
+          g.fillStyle = 'rgba(255,255,255,0.85)';
+          g.fillRect(x - 2, y - 2, 34, 14);
+          g.fillStyle = tc.board;
+          g.fillText('R' + (r + 1) + 'C' + (c + 1), x, y);
+        }
+      }
+    }
+  }
+
+  // 色号：格太小会糊成噪点，所以设了阈值
+  if (els.showCodes.checked && cell >= 13) {
+    g.font = '500 ' + Math.round(cell * 0.34) + 'px Consolas, "Courier New", monospace';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = state.grid[y * W + x];
+        if (idx < 0) continue;
+        const p = PALETTE[idx];
+        const lum = (p.r * 299 + p.g * 587 + p.b * 114) / 1000;
+        g.fillStyle = lum > 150 ? 'rgba(27,24,21,0.72)' : 'rgba(255,255,255,0.86)';
+        g.fillText(p.code.slice(1), ox + x * cell + cell / 2, oy + y * cell + cell / 2 + 1);
+      }
+    }
+  }
+
+  // 标尺最后画，压在豆子上面
+  if (pad) drawRulers(g, W, H, cell, cw, chh);
+
+  drawOverlay();
+}
+
+/* 图纸标尺：行列号。拼豆时数错格子是最常见的返工原因，
+   所以行列号直接画进画布，缩放也不会错位。 */
+function drawRulers(g, W, H, cell, cw, chh) {
+  const s = cell;
+
+  g.fillStyle = tc.rulerBg;
+  g.fillRect(0, 0, cw, s);
+  g.fillRect(0, 0, s, chh);
+
+  g.strokeStyle = tc.grid;
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(0, s + 0.5); g.lineTo(cw, s + 0.5);
+  g.moveTo(s + 0.5, 0); g.lineTo(s + 0.5, chh);
+  g.stroke();
+
+  const step = cell >= 13 ? 5 : 10;
+  const fs = Math.max(9, Math.min(11, Math.round(cell * 0.7)));
+  g.font = '500 ' + fs + 'px Consolas, "Courier New", monospace';
+  g.fillStyle = tc.rulerInk;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+
+  for (let x = 1; x <= W; x++) {
+    if (x !== 1 && x % step !== 0) continue;
+    g.fillText(String(x), s + (x - 1) * cell + cell / 2, s / 2);
+  }
+  for (let y = 1; y <= H; y++) {
+    if (y !== 1 && y % step !== 0) continue;
+    g.fillText(String(y), s / 2, s + (y - 1) * cell + cell / 2);
+  }
+
+  g.fillStyle = tc.rulerInk;
+  g.font = '500 9px Consolas, monospace';
+  g.fillText('·', s / 2, s / 2);
+}
+
+/* 悬停层：只画十字参考线与当前格，不动底层像素，所以移动鼠标不卡 */
+function drawOverlay() {
+  const L = state.layout;
+  if (!L) return;
+
+  const g = els.overlay.getContext('2d');
+  g.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+  g.clearRect(0, 0, L.cw, L.chh);
+
+  const hv = state.hover;
+  if (!hv || hv.x < 0 || hv.y < 0 || hv.x >= state.W || hv.y >= state.H) return;
+
+  const px = L.ox + hv.x * L.cell;
+  const py = L.oy + hv.y * L.cell;
+
+  // 在标尺上框出当前行/列，抬头就能对上号
+  g.strokeStyle = tc.board;
+
+  if (L.pad) {
+    g.globalAlpha = 0.85;
+    g.lineWidth = 1.5;
+    g.strokeRect(px + 0.75, 1.75, L.cell - 1.5, L.cell - 3.5);
+    g.strokeRect(1.75, py + 0.75, L.cell - 3.5, L.cell - 1.5);
+  }
+
+  g.globalAlpha = 0.32;
+  g.lineWidth = 1;
+  g.setLineDash([4, 4]);
+  g.beginPath();
+  g.moveTo(px + L.cell / 2, L.oy);
+  g.lineTo(px + L.cell / 2, L.oy + state.H * L.cell);
+  g.moveTo(L.ox, py + L.cell / 2);
+  g.lineTo(L.ox + state.W * L.cell, py + L.cell / 2);
+  g.stroke();
+  g.setLineDash([]);
+
+  g.globalAlpha = 1;
+  g.lineWidth = 2;
+  g.strokeRect(px + 1, py + 1, L.cell - 2, L.cell - 2);
+}
+
+/* ============================================================
+   14. 导出
+   ============================================================ */
+function download(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function stamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+}
+
+function exportPatternPng() {
+  if (!state.grid) return;
+
+  const W = state.W, H = state.H;
+  const pegs = state.spec.boardPegs;
+  const cm = cmPerBead();
+  const b = boardGrid();
+
+  const cell = 26;
+  const padSide = 20, padTop = 48, padBottom = 28, gutter = 24;
+  const cw = padSide * 2 + gutter + W * cell;
+  const ch = padTop + gutter + H * cell + padBottom;
+  const ox = padSide + gutter;
+  const oy = padTop + gutter;
+  const fontFamily = getComputedStyle(document.body).fontFamily;
+
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const g = c.getContext('2d');
+
+  g.fillStyle = '#FFFFFF';
+  g.fillRect(0, 0, cw, ch);
+
+  // ---- 标题栏 ----
+  g.fillStyle = '#1B1815';
+  g.font = '600 15px ' + fontFamily;
+  g.textAlign = 'left';
+  g.textBaseline = 'alphabetic';
+  g.fillText(
+    W + ' × ' + H + ' 颗 · ' + (W * cm).toFixed(1) + ' × ' + (H * cm).toFixed(1) + ' cm · ' + state.spec.label,
+    padSide, 22
+  );
+  g.fillStyle = '#57504A';
+  g.font = '12px ' + fontFamily;
+  g.fillText(
+    b.rows + ' × ' + b.cols + ' 块板（' + pegs + '×' + pegs + ' 钉）· 共 ' +
+    fmtNum(state.total) + ' 颗 · 用色 ' + state.counts.size + ' 种',
+    padSide, 40
+  );
+
+  // ---- 空钉位底色 ----
+  g.fillStyle = '#F4EFE7';
+  g.fillRect(ox, oy, W * cell, H * cell);
+
+  // ---- 豆子 ----
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = state.grid[y * W + x];
+      if (idx < 0) continue;
+      g.fillStyle = PALETTE[idx].hex;
+      g.fillRect(ox + x * cell, oy + y * cell, cell, cell);
+    }
+  }
+
+  // ---- 网格 ----
+  g.strokeStyle = 'rgba(27,24,21,0.16)';
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let x = 0; x <= W; x++) {
+    g.moveTo(ox + x * cell + 0.5, oy);
+    g.lineTo(ox + x * cell + 0.5, oy + H * cell);
+  }
+  for (let y = 0; y <= H; y++) {
+    g.moveTo(ox, oy + y * cell + 0.5);
+    g.lineTo(ox + W * cell, oy + y * cell + 0.5);
+  }
+  g.stroke();
+
+  // ---- 板线 ----
+  if (b.cols > 1 || b.rows > 1) {
+    g.strokeStyle = tc.board;
+    g.lineWidth = 2.5;
+    g.beginPath();
+    for (let cc = 1; cc < b.cols; cc++) {
+      const x = ox + Math.min(cc * pegs, W) * cell + 0.5;
+      g.moveTo(x, oy); g.lineTo(x, oy + H * cell);
+    }
+    for (let rr = 1; rr < b.rows; rr++) {
+      const y = oy + Math.min(rr * pegs, H) * cell + 0.5;
+      g.moveTo(ox, y); g.lineTo(ox + W * cell, y);
+    }
+    g.stroke();
+  }
+
+  // ---- 行列号：打印出来要用它数格子 ----
+  g.fillStyle = '#EDE7DC';
+  g.fillRect(ox, padTop, W * cell, gutter);
+  g.fillRect(padSide, oy, gutter, H * cell);
+
+  g.strokeStyle = 'rgba(27,24,21,0.25)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(ox, padTop + gutter + 0.5); g.lineTo(ox + W * cell, padTop + gutter + 0.5);
+  g.moveTo(padSide + gutter + 0.5, oy); g.lineTo(padSide + gutter + 0.5, oy + H * cell);
+  g.stroke();
+
+  g.fillStyle = '#6B6257';
+  g.font = '600 10px ' + fontFamily;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (let x = 1; x <= W; x++) {
+    if (x !== 1 && x % 5 !== 0) continue;
+    g.fillText(String(x), ox + (x - 1) * cell + cell / 2, padTop + gutter / 2);
+  }
+  for (let y = 1; y <= H; y++) {
+    if (y !== 1 && y % 5 !== 0) continue;
+    g.fillText(String(y), padSide + gutter / 2, oy + (y - 1) * cell + cell / 2);
+  }
+
+  // ---- 格内色号 ----
+  g.font = '500 9px ' + fontFamily;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = state.grid[y * W + x];
+      if (idx < 0) continue;
+      const p = PALETTE[idx];
+      const lum = (p.r * 299 + p.g * 587 + p.b * 114) / 1000;
+      g.fillStyle = lum > 150 ? 'rgba(27,24,21,0.75)' : 'rgba(255,255,255,0.9)';
+      g.fillText(p.code.slice(1), ox + x * cell + cell / 2, oy + y * cell + cell / 2 + 0.5);
+    }
+  }
+
+  // ---- 页脚 ----
+  g.fillStyle = '#8A847C';
+  g.font = '11px ' + fontFamily;
+  g.textAlign = 'left';
+  g.fillText('生成于拼豆工作台 · 色值为屏幕参考，请以实物色卡为准', padSide, ch - 10);
+
+  c.toBlob(function (blob) {
+    if (blob) {
+      download(blob, '拼豆图纸_' + W + 'x' + H + '_' +
+        (state.spec === SPECS.midi ? '5mm' : '2.6mm') + '_' + stamp() + '.png');
+    }
+  }, 'image/png');
+}
+
+function exportCsv() {
+  if (!state.counts) return;
+  const rows = [['色号', '颜色', 'HEX', '颗数', '占比', '建议袋数']];
+  const total = state.total || 1;
+
+  Array.from(state.counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([idx, count]) => {
+      const p = PALETTE[idx];
+      rows.push([
+        p.code, p.name, p.hex, count,
+        (count / total * 100).toFixed(2) + '%',
+        Math.ceil((count * (1 + STOCK_RATE)) / BAG_SIZE)
+      ]);
+    });
+
+  rows.push([]);
+  rows.push(['合计', '', '', state.total, '100%', '']);
+  rows.push(['成品尺寸', `${(state.W * cmPerBead()).toFixed(1)} × ${(state.H * cmPerBead()).toFixed(1)} cm`]);
+  rows.push(['拼豆板', `${boardGrid().rows} × ${boardGrid().cols} 块`]);
+  rows.push(['总重量', `${(state.total * state.spec.beadGrams).toFixed(1)} g`]);
+
+  const csv = rows.map((r) => r.map((v) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(',')).join('\r\n');
+
+  // BOM 让 Excel 正确识别 UTF-8 中文
+  download(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }),
+    `拼豆用量_${state.W}x${state.H}_${stamp()}.csv`);
+}
+
+function exportJson() {
+  if (!state.grid) return;
+  const usedPalette = Array.from(new Set(Array.from(state.grid).filter((v) => v >= 0)))
+    .map((idx) => {
+      const p = PALETTE[idx];
+      return { idx, code: p.code, name: p.name, hex: p.hex };
+    });
+
+  const payload = {
+    app: 'bead-workbench',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    spec: state.spec === SPECS.midi ? 'midi' : 'mini',
+    specDetail: state.spec,
+    width: state.W,
+    height: state.H,
+    palette: usedPalette,
+    counts: Array.from(state.counts.entries()).map(([idx, count]) => ({
+      code: PALETTE[idx].code, name: PALETTE[idx].name, count
+    })),
+    total: state.total,
+    grid: Array.from(state.grid)
+  };
+
+  download(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }),
+    `拼豆工程_${state.W}x${state.H}_${stamp()}.json`);
+}
+
+/* ============================================================
+   15. 内置示例：一颗像素爱心
+   打开就能看到效果，不用先找图；也是最常见的拼豆入门作品。
+   ============================================================ */
+function loadDemo() {
+  const MAP = [
+    '..............',
+    '...RR....RR...',
+    '..PPRR..RRRR..',
+    '.PPRRRRRRRRRR.',
+    '.RRRRRRRRRRRR.',
+    '.RRRRRRRRRRRR.',
+    '..DRRRRRRRRD..',
+    '...DDRRRRDD...',
+    '....DDRRDD....',
+    '.....DDDD.....',
+    '......DD......',
+    '..............'
+  ];
+  const COLORS = { R: '#D8262C', D: '#A31820', P: '#F7C6D0' };
+
+  const cols = MAP[0].length, rows = MAP.length;
+  const px = 10;
+  const c = document.createElement('canvas');
+  c.width = cols * px;
+  c.height = rows * px;
+  const g = c.getContext('2d');
+  // 故意不填底色：画布保持透明，空白钉位才不会被算成一圈白豆
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const ch = MAP[y][x];
+      if (!ch || ch === '.' || ch === ' ') continue;
+      g.fillStyle = COLORS[ch] || '#FFF';
+      g.fillRect(x * px, y * px, px, px);
+    }
+  }
+
+  const img = new Image();
+  img.onload = () => loadImageElement(img, true);
+  img.src = c.toDataURL('image/png');
+}
+
+/* ============================================================
+   16. 事件
+   ============================================================ */
+let rafPending = false;
+function scheduleRebuild() {
+  if (rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => {
+    rafPending = false;
+    rebuild();
+  });
+}
+
+// 参数变化 → 重算
+[
+  els.widthRange, els.colorRange,
+  els.brightness, els.contrast, els.saturation, els.gamma,
+  els.bgRange
+].forEach((el) => {
+  el.addEventListener('input', () => {
+    updateLabelOutputs();
+    scheduleRebuild();
+  });
+});
+
+els.mirror.addEventListener('change', scheduleRebuild);
+els.dither.addEventListener('change', scheduleRebuild);
+
+// 显示选项 → 只重绘
+[els.showGrid, els.showCodes, els.showBoards, els.showOrigin].forEach((el) => {
+  el.addEventListener('change', draw);
+});
+
+// 规格切换 → 只影响物理换算与板线，不用重新配色
+document.querySelectorAll('.spec-switch button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.spec;
+    state.spec = SPECS[key];
+    document.querySelectorAll('.spec-switch button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    if (state.grid) {
+      updateHints();
+      updateStats();
+      draw();
+    }
+  });
+});
+
+// 单价用 change 即可，拖动时不必实时
+els.bagPrice.addEventListener('input', updateLabelOutputs);
+els.bagPrice.addEventListener('change', () => { if (state.counts) updateStats(); });
+
+function updateLabelOutputs() {
+  els.widthOut.textContent = els.widthRange.value;
+  els.colorOut.textContent = els.colorRange.value;
+  els.priceOut.textContent = '¥' + Number(els.bagPrice.value).toFixed(0);
+
+  const adj = [
+    ['亮度', els.brightness.value, 100],
+    ['对比', els.contrast.value, 100],
+    ['饱和', els.saturation.value, 100],
+    ['伽马', els.gamma.value, 100]
+  ].filter(([, v, d]) => Number(v) !== d);
+  els.adjustOut.textContent = adj.length ? adj.map(([n, v]) => `${n}${v}`).join(' ') : '默认';
+
+  const bgv = Number(els.bgRange.value);
+  els.bgOut.textContent = bgv === 0 ? '关' : '容差 ' + bgv;
+
+  if (state.W) updateHints();
+}
+
+// 上传
+els.pickBtn.addEventListener('click', () => els.fileInput.click());
+els.fileInput.addEventListener('change', (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (f) loadFromFile(f);
+  e.target.value = '';
+});
+
+['dragenter', 'dragover'].forEach((t) => {
+  els.drop.addEventListener(t, (e) => {
+    e.preventDefault();
+    els.drop.classList.add('is-over');
+  });
+});
+['dragleave', 'drop'].forEach((t) => {
+  els.drop.addEventListener(t, (e) => {
+    e.preventDefault();
+    els.drop.classList.remove('is-over');
+  });
+});
+els.drop.addEventListener('drop', (e) => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadFromFile(f);
+});
+
+// 整个页面都可以接收粘贴
+window.addEventListener('paste', (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const f = item.getAsFile();
+      if (f) { loadFromFile(f); e.preventDefault(); }
+      break;
+    }
+  }
+});
+
+// 视口变化时重算格子大小
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(draw, 150);
+});
+
+/* ============================================================
+   13.5 缩放与平移
+   放大靠改 canvas 的 CSS 尺寸（配合 pixelated），不走 transform，
+   这样坐标换算、overlay 对齐都不用改，也不会把标尺文字变糊。
+   ============================================================ */
+function applyZoomSize() {
+  const L = state.layout;
+  if (!L) return;
+  const w = Math.round(L.cw * state.zoom);
+  const hh = Math.round(L.chh * state.zoom);
+
+  const limit = state.zoom > 1.01 ? 'none' : '100%';
+
+  els.preview.style.width = w + 'px';
+  els.preview.style.height = hh + 'px';
+  els.preview.style.maxWidth = limit;
+  els.overlay.style.width = w + 'px';
+  els.overlay.style.height = hh + 'px';
+  els.overlay.style.maxWidth = limit;
+  els.stageStack.style.width = w + 'px';
+  els.stageStack.style.height = hh + 'px';
+
+  els.zoomLabel.textContent = Math.round(state.zoom * 100) + '%';
+  els.canvasWrap.classList.toggle('is-zoomable', state.zoom > 1.01);
+}
+
+// 以某个屏幕位置为锚点缩放：那个位置下的豆子不会跑掉
+function setZoom(next, anchorX, anchorY) {
+  const wrap = els.canvasWrap;
+  const prev = state.zoom;
+  const z = Math.max(0.5, Math.min(6, next));
+  if (Math.abs(z - prev) < 0.001) return;
+
+  const wr = wrap.getBoundingClientRect();
+  const ax = (anchorX == null ? wr.left + wr.width / 2 : anchorX) - wr.left;
+  const ay = (anchorY == null ? wr.top + wr.height / 2 : anchorY) - wr.top;
+
+  // 锚点在"未缩放坐标"里的位置
+  const cx = (wrap.scrollLeft + ax) / prev;
+  const cy = (wrap.scrollTop + ay) / prev;
+
+  state.zoom = z;
+  applyZoomSize();
+
+  // 读一次 scrollWidth 强制浏览器先完成重排，否则下面的滚动赋值会被丢弃
+  void wrap.scrollWidth;
+
+  // 换算回新倍率下的滚动位置
+  wrap.scrollLeft = cx * z - ax;
+  wrap.scrollTop = cy * z - ay;
+}
+
+function fitToWindow() {
+  state.zoom = 1;
+  applyZoomSize();
+  els.canvasWrap.scrollLeft = 0;
+  els.canvasWrap.scrollTop = 0;
+}
+
+els.zoomIn.addEventListener('click', () => setZoom(state.zoom * 1.4));
+els.zoomOut.addEventListener('click', () => setZoom(state.zoom / 1.4));
+
+// 滚轮缩放：只在有图纸时接管，避免影响页面滚动
+els.canvasWrap.addEventListener('wheel', (e) => {
+  if (!state.grid) return;
+  e.preventDefault();
+  setZoom(state.zoom * (e.deltaY < 0 ? 1.16 : 1 / 1.16), e.clientX, e.clientY);
+}, { passive: false });
+
+// 按住拖动平移
+let drag = null;
+
+els.canvasWrap.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || !state.grid) return;
+  drag = {
+    x: e.clientX, y: e.clientY,
+    sl: els.canvasWrap.scrollLeft, st: els.canvasWrap.scrollTop
+  };
+  els.canvasWrap.classList.add('is-dragging');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!drag) return;
+  els.canvasWrap.scrollLeft = drag.sl - (e.clientX - drag.x);
+  els.canvasWrap.scrollTop = drag.st - (e.clientY - drag.y);
+});
+
+window.addEventListener('mouseup', () => {
+  if (!drag) return;
+  drag = null;
+  els.canvasWrap.classList.remove('is-dragging');
+});
+
+// 双击在 100% 与 200% 之间切换
+els.canvasWrap.addEventListener('dblclick', (e) => {
+  if (!state.grid) return;
+  setZoom(state.zoom > 1.5 ? 1 : 2, e.clientX, e.clientY);
+});
+
+els.resetView.addEventListener('click', () => {
+  if (!state.grid) return;
+  fitToWindow();
+  draw();
+});
+
+/* ---- 图纸交互：悬停定位 / 颜色高亮 ---- */
+
+// 把鼠标位置换算成格子。CSS 尺寸可能被 max-width 压缩，所以按比例换算
+function cellFromEvent(e) {
+  const L = state.layout;
+  if (!L) return null;
+  const r = els.preview.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  const gx = Math.floor((e.clientX - r.left) / r.width * (state.W + L.pad)) - L.pad;
+  const gy = Math.floor((e.clientY - r.top) / r.height * (state.H + L.pad)) - L.pad;
+  if (gx < 0 || gy < 0 || gx >= state.W || gy >= state.H) return null;
+  return { x: gx, y: gy };
+}
+
+els.canvasWrap.addEventListener('mousemove', (e) => {
+  if (!state.grid || drag) return;
+  const c = cellFromEvent(e);
+  state.hover = c;
+  drawOverlay();
+
+  if (!c) { els.cellTip.hidden = true; return; }
+
+  const idx = state.grid[c.y * state.W + c.x];
+  const p = idx >= 0 ? PALETTE[idx] : null;
+  els.cellTip.innerHTML = p
+    ? `行 ${c.y + 1} 列 ${c.x + 1}　<span style="opacity:.65">${p.code} ${p.name}</span>`
+    : `行 ${c.y + 1} 列 ${c.x + 1}　<span style="opacity:.65">空位</span>`;
+  els.cellTip.hidden = false;
+
+  const sr = els.stageStack.getBoundingClientRect();
+  const localX = e.clientX - sr.left;
+  const localY = e.clientY - sr.top;
+
+  // 靠边时把标签翻到另一侧，别被裁掉
+  els.cellTip.style.left = Math.max(72, Math.min(sr.width - 72, localX)) + 'px';
+  els.cellTip.style.top = localY + 'px';
+  els.cellTip.style.transform = localY < 52
+    ? 'translate(-50%, 40%)'
+    : 'translate(-50%, -135%)';
+});
+
+els.canvasWrap.addEventListener('mouseleave', () => {
+  state.hover = null;
+  els.cellTip.hidden = true;
+  drawOverlay();
+});
+
+// 点配色表的一行，把该颜色的所有格子亮起来
+function applyFocus() {
+  const f = state.focusColor;
+
+  els.colorBody.querySelectorAll('tr').forEach((tr) => {
+    tr.classList.toggle('is-focus', Number(tr.dataset.idx) === f);
+  });
+  els.clearFocus.hidden = !(f >= 0 && state.counts);
+
+  if (state.counts) {
+    const active = f >= 0 && state.counts.has(f);
+    els.tableHint.textContent = active
+      ? `定位 ${PALETTE[f].code} · ${fmtNum(state.counts.get(f))} 颗`
+      : `${state.counts.size} 色 · ${fmtNum(state.total)} 颗`;
+  }
+
+  draw();
+}
+
+els.colorBody.addEventListener('click', (e) => {
+  const tr = e.target.closest('tr');
+  if (!tr || tr.dataset.idx === undefined) return;
+  const idx = Number(tr.dataset.idx);
+  // 再点一次同一行就取消，省得去找清除按钮
+  state.focusColor = state.focusColor === idx ? -1 : idx;
+  applyFocus();
+});
+
+els.clearFocus.addEventListener('click', () => {
+  state.focusColor = -1;
+  applyFocus();
+});
+
+// 重新按当前图片推荐一套参数（手动调乱了可以一键回到自动值）
+els.autoBtn.addEventListener('click', () => {
+  if (!state.srcCanvas) return;
+  const tuned = autoTune(state.srcCanvas);
+  state.srcCanvas = tuned.canvas;
+  state.srcW = tuned.canvas.width;
+  state.srcH = tuned.canvas.height;
+  showAutoNote(tuned.text, tuned.ok);
+  updateLabelOutputs();
+  rebuild();
+});
+
+// 容器尺寸变化（窗口缩放、侧栏折行）时重算格子大小
+if ('ResizeObserver' in window) {
+  let roTimer = null;
+  const ro = new ResizeObserver(() => {
+    clearTimeout(roTimer);
+    roTimer = setTimeout(() => { if (state.grid) draw(); }, 80);
+  });
+  ro.observe(els.canvasWrap);
+}
+
+// 导出
+els.exportPng.addEventListener('click', exportPatternPng);
+els.exportCsv.addEventListener('click', exportCsv);
+els.exportJson.addEventListener('click', exportJson);
+
+/* ============================================================
+   17. 主题
+   两套配色都是 CSS 变量，切换只改一个属性，画布颜色也一起变。
+   ============================================================ */
+const THEME_KEY = 'bead-workbench-theme';
+
+function applyTheme(name) {
+  const t = name === 'retro' ? 'retro' : 'apple';
+  document.documentElement.setAttribute('data-theme', t);
+  els.themeName.textContent = t === 'retro' ? '复古风' : '苹果风';
+  els.themeBtn.setAttribute('title', t === 'retro' ? '当前：复古风，点击切到苹果风' : '当前：苹果风，点击切到复古风');
+
+  try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 隐私模式下忽略 */ }
+
+  readThemeColors();
+  if (state.grid) draw();
+}
+
+els.themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  applyTheme(cur === 'retro' ? 'apple' : 'retro');
+});
+
+/* ============================================================
+   18. 键盘快捷键
+   + / − 缩放，0 适应窗口，Esc 取消颜色定位
+   ============================================================ */
+window.addEventListener('keydown', (e) => {
+  // 输入框里不抢键
+  if (e.target && e.target.matches && e.target.matches('input, textarea, select')) return;
+  if (!state.grid) return;
+
+  if (e.key === '+' || e.key === '=') {
+    setZoom(state.zoom * 1.3); e.preventDefault();
+  } else if (e.key === '-' || e.key === '_') {
+    setZoom(state.zoom / 1.3); e.preventDefault();
+  } else if (e.key === '0') {
+    fitToWindow(); draw(); e.preventDefault();
+  } else if (e.key === 'Escape' && state.focusColor >= 0) {
+    state.focusColor = -1; applyFocus();
+  }
+});
+
+// 启动
+let savedTheme = null;
+try { savedTheme = localStorage.getItem(THEME_KEY); } catch (e) { /* 忽略 */ }
+applyTheme(savedTheme || 'apple');
+
+updateLabelOutputs();
+loadDemo();
+</script>
+</body>
+</html>
